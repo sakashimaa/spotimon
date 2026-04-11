@@ -1,165 +1,14 @@
-use std::{
-    fs::{self, File},
-    path::{Path, PathBuf},
-};
+use std::fs::{self, File};
 
-use lofty::file::{AudioFile, TaggedFileExt};
-use lofty::prelude::ItemKey;
 use ratatui::{
-    Frame,
     crossterm::event::{self, KeyCode},
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Row, Table, TableState},
+    widgets::TableState,
 };
 use rodio::Decoder;
-use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
-#[derive(Serialize, Deserialize)]
-struct AppConfig {
-    device: DeviceConfig,
-    music_folder: PathBuf,
-}
-
-#[derive(Serialize, Deserialize)]
-struct DeviceConfig {
-    volume: u32,
-}
-
-struct TrackLibrary {
-    tracks: Vec<Track>,
-}
-
-impl TrackLibrary {
-    fn new(music_folder: &PathBuf) -> Self {
-        let tracks: Vec<_> = WalkDir::new(music_folder)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .is_some_and(|ext| matches!(ext, "mp3" | "flac" | "ogg"))
-            })
-            .filter_map(|f| {
-                let tagged = lofty::read_from_path(f.path()).ok()?;
-                let tag = tagged.primary_tag().or(tagged.first_tag())?;
-
-                Some(Track {
-                    title: tag
-                        .get_string(ItemKey::TrackTitle)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| {
-                            f.path()
-                                .file_stem()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string()
-                        }),
-                    artist: tag
-                        .get_string(ItemKey::TrackArtist)
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("Unknown")
-                        .to_string(),
-                    album: tag
-                        .get_string(ItemKey::AlbumTitle)
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("Unknown")
-                        .to_string(),
-                    duration: tagged.properties().duration(),
-                    path: f.path().to_path_buf(),
-                })
-            })
-            .collect();
-
-        Self { tracks }
-    }
-}
-
-struct Track {
-    title: String,
-    artist: String,
-    album: String,
-    duration: std::time::Duration,
-    #[allow(unused)]
-    path: PathBuf,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            device: DeviceConfig { volume: 50 },
-            music_folder: dirs::home_dir().expect("No home dir").join("Music"),
-        }
-    }
-}
-
-fn write_default_config(path: &Path) -> AppConfig {
-    let default_conf = AppConfig::default();
-    let toml_str = toml::to_string(&default_conf).expect("Failed to serialize");
-    fs::write(path, &toml_str).expect("Failed to write");
-
-    default_conf
-}
-
-fn render_track_table(
-    frame: &mut Frame,
-    area: Rect,
-    table_state: &mut TableState,
-    track_library: &TrackLibrary,
-) {
-    let header = Row::new(["Title", "Artist", "Album", "Duration"])
-        .style(Style::new().bold())
-        .bottom_margin(1);
-
-    let rows: Vec<Row> = track_library
-        .tracks
-        .iter()
-        .map(|t| {
-            let mins = t.duration.as_secs() / 60;
-            let secs = t.duration.as_secs() % 60;
-            Row::new([
-                t.title.clone(),
-                t.artist.clone(),
-                t.album.clone(),
-                format!("{}:{:02}", mins, secs),
-            ])
-        })
-        .collect();
-    let widths = [
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
-        Constraint::Percentage(25),
-    ];
-
-    let table = Table::new(rows, widths)
-        .header(header)
-        .column_spacing(1)
-        .style(Color::Blue)
-        .row_highlight_style(Style::new().on_black().bold())
-        .column_highlight_style(Color::Gray);
-
-    frame.render_stateful_widget(table, area, table_state);
-}
-
-fn render(frame: &mut Frame, library: &TrackLibrary, track_table_state: &mut TableState) {
-    let layout = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
-    let [top, main] = frame.area().layout(&layout);
-
-    let title = Line::from_iter([
-        Span::from("Track library").bold(),
-        Span::from(" (Press 'q' to quit and arrow keys to navigate"),
-    ]);
-    frame.render_widget(title.centered(), top);
-
-    render_track_table(frame, main, track_table_state, library);
-}
-
-// TODO: add ratatui popup rendering
-fn render_error_popup() {}
+mod config;
+mod track_library;
+mod ui;
 
 fn main() -> color_eyre::Result<()> {
     let config_dir = dirs::config_dir().expect("No config dir").join("spotimon");
@@ -169,10 +18,10 @@ fn main() -> color_eyre::Result<()> {
 
     let config_path = config_dir.join("config.toml");
 
-    let config_contents: AppConfig = match fs::read_to_string(&config_path) {
-        Ok(r) => toml::from_str(&r).unwrap_or_else(|_| write_default_config(&config_path)),
+    let config_contents: config::AppConfig = match fs::read_to_string(&config_path) {
+        Ok(r) => toml::from_str(&r).unwrap_or_else(|_| config::write_default_config(&config_path)),
         Err(e) => match e.kind() {
-            std::io::ErrorKind::NotFound => write_default_config(&config_path),
+            std::io::ErrorKind::NotFound => config::write_default_config(&config_path),
             e => {
                 panic!("Unknown error: {e}");
             }
@@ -184,7 +33,7 @@ fn main() -> color_eyre::Result<()> {
     }
 
     color_eyre::install()?;
-    let library = TrackLibrary::new(&config_contents.music_folder);
+    let library = track_library::TrackLibrary::new(&config_contents.music_folder);
 
     let mut terminal = ratatui::init();
     let mut track_table_state = TableState::default();
@@ -193,11 +42,10 @@ fn main() -> color_eyre::Result<()> {
 
     let handle =
         rodio::DeviceSinkBuilder::open_default_sink().expect("Failed to open audio stream");
-    let player = rodio::Player::connect_new(handle.mixer());
 
     loop {
         terminal.draw(|frame| {
-            render(frame, &library, &mut track_table_state);
+            ui::render::render(frame, &library, &mut track_table_state);
         })?;
 
         if let Some(key) = event::read()?.as_key_press_event() {
@@ -219,13 +67,6 @@ fn main() -> color_eyre::Result<()> {
                             Err(_) => continue,
                         };
                         handle.mixer().add(source);
-                    }
-                }
-                KeyCode::Char(' ') => {
-                    if player.is_paused() {
-                        player.play()
-                    } else {
-                        player.pause()
                     }
                 }
                 _ => {}
