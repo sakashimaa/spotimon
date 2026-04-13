@@ -2,3 +2,5 @@
 
 [device]
 volume = 90
+
+skip_interval_secs=5

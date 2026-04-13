@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct AppConfig {
     pub device: DeviceConfig,
     pub music_folder: PathBuf,
+    pub skip_interval_secs: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -19,6 +20,7 @@ pub struct DeviceConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            skip_interval_secs: 5,
             device: DeviceConfig { volume: 50 },
             music_folder: dirs::home_dir().expect("No home dir").join("Music"),
         }
