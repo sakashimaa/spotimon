@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    state::{App, InputMode, PlaybackState},
+    state::{Action, App, InputMode, PlaybackState},
     utils::get_track_source,
 };
 
@@ -75,7 +75,72 @@ fn main() -> color_eyre::Result<()> {
         {
             match app_state.input_state.mode {
                 InputMode::Normal => {
-                    app_state.handle_normal_mode(key.code, &player, &config_contents);
+                    match app_state.handle_normal_mode(key.code, &config_contents) {
+                        Action::Quit => {
+                            if app_state.input_state.filtered_indices.is_some() {
+                                app_state.input_state.search_query.clear();
+                                app_state.input_state.filtered_indices = None;
+                            }
+                        }
+                        Action::SeekForward(duration) => {
+                            let new_pos = player.get_pos() + duration;
+                            let _ = player.try_seek(new_pos);
+                        }
+                        Action::SeekBackward(duration) => {
+                            let new_pos = player
+                                .get_pos()
+                                .checked_sub(duration)
+                                .unwrap_or(Duration::ZERO);
+                            let _ = player.try_seek(new_pos);
+                        }
+                        Action::NavigateDown => app_state.table_state.select_next(),
+                        Action::NavigateUp => app_state.table_state.select_previous(),
+                        Action::SetVolume(step) => player.set_volume(step),
+                        Action::NextTrack => {
+                            let next_idx = app_state.next_track_idx();
+
+                            if let Some(source) = get_track_source(next_idx, &app_state) {
+                                player.stop();
+                                player.append(source);
+                                app_state.play_track(next_idx);
+                            }
+                        }
+                        Action::PrevTrack => {
+                            let prev_idx = app_state.prev_track_idx();
+
+                            if let Some(source) = get_track_source(prev_idx, &app_state) {
+                                player.stop();
+                                player.append(source);
+                                app_state.play_track(prev_idx);
+                            }
+                        }
+                        Action::Pause => {
+                            if player.is_paused() {
+                                player.play();
+                            } else {
+                                player.pause();
+                            }
+                        }
+                        Action::ToggleShuffle => {
+                            app_state.playback.is_random_shuffle =
+                                !app_state.playback.is_random_shuffle;
+                        }
+                        Action::Play(idx) => {
+                            if let Some(source) = get_track_source(idx, &app_state) {
+                                if player.is_paused() {
+                                    player.play();
+                                }
+                                player.stop();
+                                player.append(source);
+                                app_state.playback.current_track = Some(idx);
+                            }
+                        }
+                        Action::ToggleInputMode(mode) => {
+                            app_state.input_state.mode = mode;
+                        }
+                        Action::None => {}
+                        _ => {}
+                    }
                     if key.code == KeyCode::Char('q') {
                         break;
                     }

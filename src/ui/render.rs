@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Gauge, Row, Table, canvas::Label},
+    widgets::{Gauge, Row, Table},
 };
 
 use crate::state::{App, InputMode};
