@@ -3,13 +3,14 @@ use std::time::{Duration, Instant};
 use rand::RngExt;
 use ratatui::{crossterm::event::KeyCode, widgets::TableState};
 
-use crate::{config::AppConfig, track_library::TrackLibrary, utils::get_track_source};
+use crate::{config::AppConfig, track_library::TrackLibrary};
 
 pub struct App {
     pub library: TrackLibrary,
     pub table_state: TableState,
     pub playback: PlaybackState,
     pub input_state: InputState,
+    pub view_mode: ViewMode,
 }
 
 #[allow(unused)]
@@ -20,6 +21,8 @@ pub struct PlaybackState {
     pub position: Duration,
     pub volume_level: f32,
     pub is_random_shuffle: bool,
+    pub lyrics: Option<String>,
+    pub lyrics_scroll: u16,
 }
 
 #[allow(unused)]
@@ -27,6 +30,12 @@ pub struct InputState {
     pub mode: InputMode,
     pub search_query: String,
     pub filtered_indices: Option<Vec<usize>>,
+}
+
+#[allow(unused)]
+pub enum ViewMode {
+    Library,
+    Lyrics,
 }
 
 #[derive(PartialEq)]
@@ -52,6 +61,8 @@ pub enum Action {
     NavigateDown,
     ToggleShuffle,
     ToggleInputMode(InputMode),
+    FetchLyrics(usize),
+    ToggleViewMode(ViewMode),
 }
 
 impl App {
@@ -65,6 +76,7 @@ impl App {
                 search_query: String::new(),
                 filtered_indices: None,
             },
+            view_mode: ViewMode::Library,
         }
     }
 
@@ -118,17 +130,59 @@ impl App {
         self.table_state.select_first();
     }
 
+    pub fn handle_search_mode(&mut self, key_code: KeyCode) -> Action {
+        match key_code {
+            KeyCode::Esc => {
+                self.input_state.mode = InputMode::Normal;
+                self.input_state.search_query.clear();
+                self.input_state.filtered_indices = None;
+
+                Action::None
+            }
+            KeyCode::Char(c) => {
+                self.input_state.search_query.push(c);
+                self.update_filter();
+
+                Action::None
+            }
+            KeyCode::Backspace => {
+                self.input_state.search_query.pop();
+
+                Action::None
+            }
+            KeyCode::Enter => {
+                self.input_state.mode = InputMode::Normal;
+                self.update_filter();
+
+                Action::None
+            }
+            _ => Action::None,
+        }
+    }
+
     pub fn handle_normal_mode(&mut self, key_code: KeyCode, config: &AppConfig) -> Action {
         match key_code {
-            KeyCode::Esc => Action::Quit,
+            KeyCode::Esc | KeyCode::Char('q') => Action::Quit,
             KeyCode::Char('l') => {
                 Action::SeekForward(Duration::from_secs(config.skip_interval_secs))
             }
             KeyCode::Char('h') => {
                 Action::SeekBackward(Duration::from_secs(config.skip_interval_secs))
             }
-            KeyCode::Char('j') | KeyCode::Down => Action::NavigateDown,
-            KeyCode::Char('k') | KeyCode::Up => Action::NavigateUp,
+            KeyCode::Char('j') | KeyCode::Down => match self.view_mode {
+                ViewMode::Lyrics => {
+                    self.playback.lyrics_scroll += 1;
+                    Action::None
+                }
+                _ => Action::NavigateDown,
+            },
+            KeyCode::Char('k') | KeyCode::Up => match self.view_mode {
+                ViewMode::Lyrics => {
+                    self.playback.lyrics_scroll = self.playback.lyrics_scroll.saturating_sub(1);
+                    Action::None
+                }
+                _ => Action::NavigateUp,
+            },
             KeyCode::Char('+') | KeyCode::Char('=') => {
                 self.playback.volume_level = (self.playback.volume_level + 0.05).min(1.0);
                 Action::SetVolume(self.playback.volume_level)
@@ -141,7 +195,10 @@ impl App {
             KeyCode::Char('p') | KeyCode::Char('P') => Action::PrevTrack,
             KeyCode::Char(' ') => Action::Pause,
             KeyCode::Char('s') => Action::ToggleShuffle,
+            KeyCode::Char('L') => Action::ToggleViewMode(ViewMode::Lyrics),
+            KeyCode::Backspace => Action::ToggleViewMode(ViewMode::Library),
             KeyCode::Enter => {
+                self.playback.lyrics_scroll = 0;
                 if let Some(selected) = self.table_state.selected() {
                     let real_idx = self
                         .input_state
@@ -170,6 +227,8 @@ impl Default for PlaybackState {
             position: Duration::new(0, 0),
             volume_level: 1.0,
             is_random_shuffle: false,
+            lyrics: Some(String::new()),
+            lyrics_scroll: 0,
         }
     }
 }

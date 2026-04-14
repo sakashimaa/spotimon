@@ -3,10 +3,10 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Gauge, Row, Table},
+    widgets::{Gauge, Paragraph, Row, Table},
 };
 
-use crate::state::{App, InputMode};
+use crate::state::{App, InputMode, ViewMode};
 
 fn render_volume_level(frame: &mut Frame, area: Rect, app_state: &mut App) {
     let volume_humanized = (app_state.playback.volume_level * 100.0) as u16;
@@ -86,6 +86,17 @@ fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
     frame.render_stateful_widget(table, area, &mut app_state.table_state);
 }
 
+pub fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
+    let lyrics = app_state
+        .playback
+        .lyrics
+        .as_deref()
+        .unwrap_or("No lyrics available.");
+
+    let paragraph = Paragraph::new(lyrics).scroll((app_state.playback.lyrics_scroll, 0));
+    frame.render_widget(paragraph, area);
+}
+
 pub fn render(frame: &mut Frame, app_state: &mut App) {
     let layout = Layout::vertical([
         Constraint::Length(1),
@@ -115,9 +126,16 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
     };
     frame.render_widget(centered_label.centered(), top);
 
-    render_track_table(frame, main, app_state);
-    render_track_progress(frame, bottom_layout[0], app_state);
-    render_volume_level(frame, bottom_layout[1], app_state);
+    match app_state.view_mode {
+        ViewMode::Library => {
+            render_track_table(frame, main, app_state);
+            render_track_progress(frame, bottom_layout[0], app_state);
+            render_volume_level(frame, bottom_layout[1], app_state);
+        }
+        ViewMode::Lyrics => {
+            render_lyrics(frame, main, app_state);
+        }
+    }
 }
 
 // TODO: add ratatui popup rendering
