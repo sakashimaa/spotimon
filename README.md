@@ -14,6 +14,7 @@ A minimalist TUI music player for local audio files, built in Rust with [ratatui
 - Auto-advance to next track with queue looping
 - Seek forward/backward
 - Vim-style keybindings
+- Watch lyrics
 
 ## Installation
 
@@ -62,6 +63,7 @@ On first run, spotimon creates a config file at `~/.config/spotimon/config.toml`
 | `/`       | Search mode                |
 | `Esc`     | Exit search / Clear filter |
 | `q`       | Quit                       |
+| `L`       | Lyrics of current track    |
 
 ## Configuration
 
