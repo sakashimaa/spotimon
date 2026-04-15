@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::state::{App, InputMode, ViewMode};
 
-fn render_volume_level(frame: &mut Frame, area: Rect, app_state: &mut App) {
+fn render_volume_level(frame: &mut Frame, area: Rect, app_state: &App) {
     let volume_humanized = (app_state.playback.volume_level * 100.0) as u16;
     let text = format!("Vol: %{volume_humanized}");
     let gauge = Gauge::default()
@@ -18,7 +18,7 @@ fn render_volume_level(frame: &mut Frame, area: Rect, app_state: &mut App) {
     frame.render_widget(gauge, area);
 }
 
-fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &mut App) {
+fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &App) {
     if let Some(idx) = app_state.playback.current_track
         && let Some(track) = app_state.library.tracks.get(idx)
     {
@@ -41,6 +41,16 @@ fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &mut App) {
             .label(label);
 
         frame.render_widget(gauge, area);
+    }
+}
+
+fn render_track_creds(frame: &mut Frame, area: Rect, app_state: &App) {
+    if let Some(track_idx) = app_state.playback.current_track {
+        let curr_track = &app_state.library.tracks[track_idx];
+        let creds = format!("{} - {}", curr_track.artist, curr_track.title);
+
+        let cred_paragraph = Paragraph::new(creds);
+        frame.render_widget(cred_paragraph, area);
     }
 }
 
@@ -102,12 +112,13 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         Constraint::Length(1),
         Constraint::Fill(1),
         Constraint::Length(1),
+        Constraint::Length(1),
     ])
     .spacing(1);
-    let [top, main, bottom] = frame.area().layout(&layout);
+    let [top, main, creds, track_bar] = frame.area().layout(&layout);
 
     let bottom_layout =
-        Layout::horizontal([Constraint::Fill(1), Constraint::Length(10)]).split(bottom);
+        Layout::horizontal([Constraint::Fill(1), Constraint::Length(10)]).split(track_bar);
 
     let shuffle_indicator = if app_state.playback.is_random_shuffle {
         Span::from(" ").style(Style::new().green())
@@ -129,13 +140,15 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
     match app_state.view_mode {
         ViewMode::Library => {
             render_track_table(frame, main, app_state);
-            render_track_progress(frame, bottom_layout[0], app_state);
-            render_volume_level(frame, bottom_layout[1], app_state);
         }
         ViewMode::Lyrics => {
             render_lyrics(frame, main, app_state);
         }
     }
+
+    render_track_progress(frame, bottom_layout[0], app_state);
+    render_volume_level(frame, bottom_layout[1], app_state);
+    render_track_creds(frame, creds, app_state);
 }
 
 // TODO: add ratatui popup rendering
