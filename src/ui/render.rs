@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Gauge, Paragraph, Row, Table},
 };
+use ratatui_image::StatefulImage;
 
 use crate::state::{App, InputMode, ViewMode};
 
@@ -41,16 +42,6 @@ fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &App) {
             .label(label);
 
         frame.render_widget(gauge, area);
-    }
-}
-
-fn render_track_creds(frame: &mut Frame, area: Rect, app_state: &App) {
-    if let Some(track_idx) = app_state.playback.current_track {
-        let curr_track = &app_state.library.tracks[track_idx];
-        let creds = format!("{} - {}", curr_track.artist, curr_track.title);
-
-        let cred_paragraph = Paragraph::new(creds);
-        frame.render_widget(cred_paragraph, area);
     }
 }
 
@@ -96,6 +87,21 @@ fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
     frame.render_stateful_widget(table, area, &mut app_state.table_state);
 }
 
+fn render_track_creds(frame: &mut Frame, area: Rect, app_state: &App) {
+    if let Some(track_idx) = app_state.playback.current_track {
+        let curr_track = &app_state.library.tracks[track_idx];
+
+        let creds = Line::from_iter([
+            Span::from(curr_track.artist.as_str()).bold(),
+            Span::from(" - "),
+            Span::from(curr_track.title.as_str()),
+        ]);
+
+        let cred_paragraph = Paragraph::new(creds);
+        frame.render_widget(cred_paragraph, area);
+    }
+}
+
 pub fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
     let lyrics = app_state
         .playback
@@ -107,23 +113,44 @@ pub fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
     frame.render_widget(paragraph, area);
 }
 
+pub fn render_cover(frame: &mut Frame, area: Rect, app_state: &mut App) {
+    if let Some(protocol) = &mut app_state.cover_protocol {
+        let image = StatefulImage::default();
+        frame.render_stateful_widget(image, area, protocol);
+    }
+}
+
 pub fn render(frame: &mut Frame, app_state: &mut App) {
+    let has_cover = app_state.cover_protocol.is_some();
+    let cover_height: u16 = if has_cover { 6 } else { 0 };
+
     let layout = Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(1),
+        Constraint::Length(cover_height + 2),
         Constraint::Length(1),
     ])
     .spacing(1);
-    let [top, main, creds, track_bar] = frame.area().layout(&layout);
+    let [top, main, bottom_info, track_bar] = frame.area().layout(&layout);
 
-    let bottom_layout =
+    let bottom_panel = Layout::vertical([
+        Constraint::Length(cover_height),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .spacing(if has_cover { 1 } else { 0 })
+    .split(bottom_info);
+
+    let cover_area = bottom_panel[0];
+    let creds_area = bottom_panel[1];
+
+    let track_bar_layout =
         Layout::horizontal([Constraint::Fill(1), Constraint::Length(10)]).split(track_bar);
 
     let shuffle_indicator = if app_state.playback.is_random_shuffle {
-        Span::from(" ").style(Style::new().green())
+        Span::from(" ").style(Style::new().green())
     } else {
-        Span::from(" ")
+        Span::from(" ")
     };
 
     let centered_label = if app_state.input_state.mode == InputMode::Search {
@@ -146,9 +173,10 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         }
     }
 
-    render_track_progress(frame, bottom_layout[0], app_state);
-    render_volume_level(frame, bottom_layout[1], app_state);
-    render_track_creds(frame, creds, app_state);
+    render_cover(frame, cover_area, app_state);
+    render_track_creds(frame, creds_area, app_state);
+    render_track_progress(frame, track_bar_layout[0], app_state);
+    render_volume_level(frame, track_bar_layout[1], app_state);
 }
 
 // TODO: add ratatui popup rendering

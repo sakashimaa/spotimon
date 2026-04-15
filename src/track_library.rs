@@ -15,6 +15,9 @@ pub struct Track {
     pub duration: std::time::Duration,
     #[allow(unused)]
     pub path: PathBuf,
+
+    #[allow(unused)]
+    pub cover: Option<Vec<u8>>,
 }
 
 impl TrackLibrary {
@@ -55,6 +58,7 @@ impl TrackLibrary {
                         .to_string(),
                     duration: tagged.properties().duration(),
                     path: f.path().to_path_buf(),
+                    cover: tag.pictures().first().map(|p| p.data().to_vec()),
                 })
             })
             .collect();

@@ -1,6 +1,7 @@
 use std::{sync::mpsc, time::Duration};
 
 use rodio::Player;
+use souvlaki::{MediaControls, MediaMetadata};
 
 use crate::{
     lyrics,
@@ -14,6 +15,7 @@ pub fn execute(
     player: &Player,
     app: &mut App,
     lyrics_tx: &mpsc::Sender<Option<String>>,
+    controls: &mut MediaControls,
 ) -> bool {
     match action {
         Action::Quit => {
@@ -88,6 +90,12 @@ pub fn execute(
             false
         }
         Action::Play(idx) => {
+            app.cover_protocol = app.library.tracks[idx]
+                .cover
+                .as_ref()
+                .and_then(|bytes| image::load_from_memory(bytes).ok())
+                .map(|img| app.picker.new_resize_protocol(img));
+
             if let Some(source) = get_track_source(idx, app) {
                 if player.is_paused() {
                     player.play();
@@ -99,6 +107,15 @@ pub fn execute(
 
             let artist = app.library.tracks[idx].artist.clone();
             let title = app.library.tracks[idx].title.clone();
+            let album = app.library.tracks[idx].album.clone();
+
+            let _ = controls.set_metadata(MediaMetadata {
+                title: Some(&title),
+                artist: Some(&artist),
+                album: Some(&album),
+                ..Default::default()
+            });
+
             let tx = lyrics_tx.clone();
 
             std::thread::spawn(move || {

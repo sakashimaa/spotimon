@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use rand::RngExt;
 use ratatui::{crossterm::event::KeyCode, widgets::TableState};
+use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
 
 use crate::{config::AppConfig, track_library::TrackLibrary};
 
@@ -11,6 +12,8 @@ pub struct App {
     pub playback: PlaybackState,
     pub input_state: InputState,
     pub view_mode: ViewMode,
+    pub cover_protocol: Option<StatefulProtocol>,
+    pub picker: Picker,
 }
 
 #[allow(unused)]
@@ -66,7 +69,12 @@ pub enum Action {
 }
 
 impl App {
-    pub fn new(library: TrackLibrary, table_state: TableState, playback: PlaybackState) -> Self {
+    pub fn new(
+        library: TrackLibrary,
+        table_state: TableState,
+        playback: PlaybackState,
+        picker: Picker,
+    ) -> Self {
         Self {
             library,
             table_state,
@@ -77,6 +85,8 @@ impl App {
                 filtered_indices: None,
             },
             view_mode: ViewMode::Library,
+            cover_protocol: None,
+            picker,
         }
     }
 
@@ -218,16 +228,16 @@ impl App {
     }
 }
 
-impl Default for PlaybackState {
-    fn default() -> Self {
+impl PlaybackState {
+    pub fn new(config: &AppConfig) -> Self {
         Self {
             current_track: None,
-            started_at: Some(Instant::now()),
+            started_at: None,
             paused: false,
             position: Duration::new(0, 0),
-            volume_level: 1.0,
+            volume_level: config.device.volume as f32 / 100.0,
             is_random_shuffle: false,
-            lyrics: Some(String::new()),
+            lyrics: None,
             lyrics_scroll: 0,
         }
     }

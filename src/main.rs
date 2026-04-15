@@ -5,9 +5,10 @@ use std::{
 };
 
 use ratatui::{
-    crossterm::event::{self, KeyCode},
+    crossterm::event::{self},
     widgets::TableState,
 };
+use ratatui_image::picker::Picker;
 
 use crate::{
     state::{Action, App, InputMode, PlaybackState},
@@ -16,6 +17,7 @@ use crate::{
 
 mod config;
 mod lyrics;
+mod mpris;
 mod player_controller;
 mod state;
 mod track_library;
@@ -55,9 +57,21 @@ fn main() -> color_eyre::Result<()> {
     let handle =
         rodio::DeviceSinkBuilder::open_default_sink().expect("Failed to open audio stream");
     let player = rodio::Player::connect_new(handle.mixer());
-    let mut app_state = App::new(library, track_table_state, PlaybackState::default());
+    player.set_volume(config_contents.device.volume as f32 / 100.0);
+
+    let picker = Picker::from_query_stdio().unwrap_or(Picker::halfblocks());
+
+    let mut app_state = App::new(
+        library,
+        track_table_state,
+        PlaybackState::new(&config_contents),
+        picker,
+    );
 
     let (lyrics_tx, lyrics_rx) = mpsc::channel::<Option<String>>();
+    let (mpris_tx, mpris_rx) = mpsc::channel::<Action>();
+    let mut controls = mpris::create_controls().expect("Failed to create MPRIS");
+    mpris::attach_handler(&mut controls, mpris_tx);
 
     loop {
         app_state.playback.position = player.get_pos();
@@ -77,11 +91,15 @@ fn main() -> color_eyre::Result<()> {
             app_state.playback.lyrics_scroll = 0;
         }
 
+        if let Ok(action) = mpris_rx.try_recv() {
+            player_controller::execute(action, &player, &mut app_state, &lyrics_tx, &mut controls);
+        }
+
         terminal.draw(|frame| {
             ui::render::render(frame, &mut app_state);
         })?;
 
-        if event::poll(Duration::from_millis(100))?
+        if event::poll(Duration::from_millis(16))?
             && let Some(key) = event::read()?.as_key_press_event()
         {
             let action = match app_state.input_state.mode {
@@ -93,7 +111,7 @@ fn main() -> color_eyre::Result<()> {
                 break;
             }
 
-            player_controller::execute(action, &player, &mut app_state, &lyrics_tx);
+            player_controller::execute(action, &player, &mut app_state, &lyrics_tx, &mut controls);
         }
     }
     ratatui::restore();
