@@ -131,9 +131,7 @@ impl App {
         if self.playback.repeat
             && let Some(idx) = self.playback.current_track
         {
-            if let Some(idx) = self.playback.current_track {
-                return idx;
-            }
+            return idx;
         }
 
         if self.playback.is_random_shuffle {

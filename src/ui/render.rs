@@ -148,6 +148,11 @@ fn render_cheatsheet(frame: &mut Frame) {
             Span::from("Backspace").bold(),
             Span::from("  go to library"),
         ]),
+        Line::from(vec![Span::from("m/M").bold(), Span::from("  toggle mute")]),
+        Line::from(vec![
+            Span::from("r/R").bold(),
+            Span::from("  toggle repeat"),
+        ]),
     ];
 
     let paragraph = Paragraph::new(lines).block(
