@@ -27,6 +27,7 @@ pub struct PlaybackState {
     pub is_random_shuffle: bool,
     pub lyrics: Option<String>,
     pub lyrics_scroll: u16,
+    pub prev_volume: f32,
 }
 
 #[allow(unused)]
@@ -91,6 +92,7 @@ pub enum Action {
     FetchLyrics(usize),
     ToggleViewMode(ViewMode),
     Sort(SortField),
+    ToggleMute,
 }
 
 impl App {
@@ -257,6 +259,7 @@ impl App {
             KeyCode::Char('2') => Action::Sort(SortField::Artist),
             KeyCode::Char('3') => Action::Sort(SortField::Album),
             KeyCode::Char('4') => Action::Sort(SortField::Duration),
+            KeyCode::Char('m') | KeyCode::Char('M') => Action::ToggleMute,
             _ => Action::None,
         }
     }
@@ -284,15 +287,18 @@ impl App {
 
 impl PlaybackState {
     pub fn new(config: &AppConfig) -> Self {
+        let config_vol = config.device.volume as f32 / 100.0;
+
         Self {
             current_track: None,
             started_at: None,
             paused: false,
             position: Duration::new(0, 0),
-            volume_level: config.device.volume as f32 / 100.0,
+            volume_level: config_vol,
             is_random_shuffle: false,
             lyrics: None,
             lyrics_scroll: 0,
+            prev_volume: config_vol,
         }
     }
 }

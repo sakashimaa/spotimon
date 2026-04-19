@@ -64,18 +64,25 @@ fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
         .clone()
         .unwrap_or_else(|| (0..app_state.library.tracks.len()).collect());
 
+    let current = app_state.playback.current_track;
     let rows: Vec<Row> = indices
         .iter()
-        .filter_map(|&i| app_state.library.tracks.get(i))
-        .map(|t| {
+        .filter_map(|&i| app_state.library.tracks.get(i).map(|t| (i, t)))
+        .map(|(i, t)| {
             let mins = t.duration.as_secs() / 60;
             let secs = t.duration.as_secs() % 60;
-            Row::new([
+
+            let row = Row::new([
                 t.title.clone(),
                 t.artist.clone(),
                 t.album.clone(),
                 format!("{}:{:02}", mins, secs),
-            ])
+            ]);
+            if Some(i) == current {
+                row.style(Style::new().red())
+            } else {
+                row
+            }
         })
         .collect();
     let widths = [

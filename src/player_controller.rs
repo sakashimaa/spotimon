@@ -151,6 +151,17 @@ pub fn execute(
             app.apply_sort();
             false
         }
+        Action::ToggleMute => {
+            if app.playback.volume_level <= 0.0 {
+                app.playback.volume_level = app.playback.prev_volume;
+            } else {
+                app.playback.prev_volume = app.playback.volume_level;
+                app.playback.volume_level = 0.0;
+            }
+
+            player.set_volume(app.playback.volume_level);
+            false
+        }
         Action::None => false,
         _ => false,
     }
