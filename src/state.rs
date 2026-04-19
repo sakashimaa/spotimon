@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use rand::RngExt;
 use ratatui::{crossterm::event::KeyCode, widgets::TableState};
-use ratatui_image::{StatefulImage, picker::Picker, protocol::StatefulProtocol};
+use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
 
 use crate::{config::AppConfig, track_library::TrackLibrary};
 
@@ -14,6 +14,7 @@ pub struct App {
     pub view_mode: ViewMode,
     pub cover_protocol: Option<StatefulProtocol>,
     pub picker: Picker,
+    pub sort_state: SortState,
 }
 
 #[allow(unused)]
@@ -39,12 +40,35 @@ pub struct InputState {
 pub enum ViewMode {
     Library,
     Lyrics,
+    Cheatsheet,
 }
 
 #[derive(PartialEq)]
 pub enum InputMode {
     Normal,
     Search,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+#[allow(unused)]
+pub enum SortField {
+    Title,
+    Artist,
+    Album,
+    Duration,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+#[allow(unused)]
+pub enum SortOrder {
+    Asc,
+    Desc,
+}
+
+#[allow(unused)]
+pub struct SortState {
+    pub field: SortField,
+    pub order: SortOrder,
 }
 
 #[allow(unused)]
@@ -66,6 +90,7 @@ pub enum Action {
     ToggleInputMode(InputMode),
     FetchLyrics(usize),
     ToggleViewMode(ViewMode),
+    Sort(SortField),
 }
 
 impl App {
@@ -87,6 +112,10 @@ impl App {
             view_mode: ViewMode::Library,
             cover_protocol: None,
             picker,
+            sort_state: SortState {
+                field: SortField::Title,
+                order: SortOrder::Asc,
+            },
         }
     }
 
@@ -223,8 +252,33 @@ impl App {
                 }
             }
             KeyCode::Char('/') => Action::ToggleInputMode(InputMode::Search),
+            KeyCode::Char('?') => Action::ToggleViewMode(ViewMode::Cheatsheet),
+            KeyCode::Char('1') => Action::Sort(SortField::Title),
+            KeyCode::Char('2') => Action::Sort(SortField::Artist),
+            KeyCode::Char('3') => Action::Sort(SortField::Album),
+            KeyCode::Char('4') => Action::Sort(SortField::Duration),
             _ => Action::None,
         }
+    }
+
+    pub fn apply_sort(&mut self) {
+        let field = self.sort_state.field;
+        let order = self.sort_state.order;
+
+        self.library.tracks.sort_by(|a, b| {
+            let cmp = match field {
+                SortField::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                SortField::Artist => a.artist.to_lowercase().cmp(&b.artist.to_lowercase()),
+                SortField::Album => a.album.to_lowercase().cmp(&b.album.to_lowercase()),
+                SortField::Duration => a.duration.cmp(&b.duration),
+            };
+
+            if order == SortOrder::Desc {
+                cmp.reverse()
+            } else {
+                cmp
+            }
+        })
     }
 }
 

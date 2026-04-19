@@ -83,6 +83,13 @@ fn main() -> color_eyre::Result<()> {
             if let Some(source) = get_track_source(next_idx, &app_state) {
                 player.append(source);
                 app_state.play_track(next_idx);
+                player_controller::execute(
+                    Action::Play(next_idx),
+                    &player,
+                    &mut app_state,
+                    &lyrics_tx,
+                    &mut controls,
+                );
             }
         }
 

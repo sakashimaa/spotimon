@@ -3,11 +3,14 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Gauge, Paragraph, Row, Table},
+    widgets::{Block, Gauge, Paragraph, Row, Table},
 };
 use ratatui_image::StatefulImage;
 
-use crate::state::{App, InputMode, ViewMode};
+use crate::{
+    state::{App, InputMode, SortField, ViewMode},
+    utils::{centered_rect, sort_indicator},
+};
 
 fn render_volume_level(frame: &mut Frame, area: Rect, app_state: &App) {
     let volume_humanized = (app_state.playback.volume_level * 100.0) as u16;
@@ -46,9 +49,14 @@ fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &App) {
 }
 
 fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
-    let header = Row::new(["Title", "Artist", "Album", "Duration"])
-        .style(Style::new().bold())
-        .bottom_margin(1);
+    let header = Row::new([
+        sort_indicator("Title", SortField::Title, &app_state.sort_state),
+        sort_indicator("Artist", SortField::Artist, &app_state.sort_state),
+        sort_indicator("Album", SortField::Album, &app_state.sort_state),
+        sort_indicator("Duration", SortField::Duration, &app_state.sort_state),
+    ])
+    .style(Style::new().bold())
+    .bottom_margin(1);
 
     let indices: Vec<usize> = app_state
         .input_state
@@ -102,7 +110,7 @@ fn render_track_creds(frame: &mut Frame, area: Rect, app_state: &App) {
     }
 }
 
-pub fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
+fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
     let lyrics = app_state
         .playback
         .lyrics
@@ -113,11 +121,36 @@ pub fn render_lyrics(frame: &mut Frame, area: Rect, app_state: &App) {
     frame.render_widget(paragraph, area);
 }
 
-pub fn render_cover(frame: &mut Frame, area: Rect, app_state: &mut App) {
+fn render_cover(frame: &mut Frame, area: Rect, app_state: &mut App) {
     if let Some(protocol) = &mut app_state.cover_protocol {
         let image = StatefulImage::default();
         frame.render_stateful_widget(image, area, protocol);
     }
+}
+
+fn render_cheatsheet(frame: &mut Frame) {
+    let lines = vec![
+        Line::from(vec![
+            Span::from("j/k").bold(),
+            Span::from("  navigate down/up"),
+        ]),
+        Line::from(vec![Span::from("Enter").bold(), Span::from("  play track")]),
+        Line::from(vec![Span::from("q").bold(), Span::from("  quit")]),
+        Line::from(vec![Span::from("?").bold(), Span::from("  toggle help")]),
+        Line::from(vec![
+            Span::from("Backspace").bold(),
+            Span::from("  go to library"),
+        ]),
+    ];
+
+    let paragraph = Paragraph::new(lines).block(
+        Block::bordered()
+            .title(" Keybinds ")
+            .border_style(Style::new().cyan()),
+    );
+
+    let area = centered_rect(40, 50, frame.area());
+    frame.render_widget(paragraph, area);
 }
 
 pub fn render(frame: &mut Frame, app_state: &mut App) {
@@ -159,7 +192,7 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         Line::from_iter([
             Span::from("Track library").bold(),
             shuffle_indicator,
-            Span::from(" (q: quit, j/k: nav, s: shuffle)"),
+            Span::from(" (q: quit, j/k: nav, s: shuffle, ?: cheatsheet)"),
         ])
     };
     frame.render_widget(centered_label.centered(), top);
@@ -171,6 +204,9 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         ViewMode::Lyrics => {
             render_lyrics(frame, main, app_state);
         }
+        ViewMode::Cheatsheet => {
+            render_cheatsheet(frame);
+        }
     }
 
     render_cover(frame, cover_area, app_state);
@@ -178,6 +214,3 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
     render_track_progress(frame, track_bar_layout[0], app_state);
     render_volume_level(frame, track_bar_layout[1], app_state);
 }
-
-// TODO: add ratatui popup rendering
-pub fn render_error_popup() {}

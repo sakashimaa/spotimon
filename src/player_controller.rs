@@ -5,7 +5,7 @@ use souvlaki::{MediaControls, MediaMetadata};
 
 use crate::{
     lyrics,
-    state::{Action, App},
+    state::{Action, App, SortOrder},
     utils::get_track_source,
 };
 
@@ -135,6 +135,20 @@ pub fn execute(
         Action::ToggleViewMode(mode) => {
             app.view_mode = mode;
 
+            false
+        }
+        Action::Sort(field) => {
+            if app.sort_state.field == field {
+                app.sort_state.order = match app.sort_state.order {
+                    SortOrder::Asc => SortOrder::Desc,
+                    SortOrder::Desc => SortOrder::Asc,
+                };
+            } else {
+                app.sort_state.field = field;
+                app.sort_state.order = SortOrder::Asc;
+            }
+
+            app.apply_sort();
             false
         }
         Action::None => false,
