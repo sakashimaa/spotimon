@@ -1,5 +1,6 @@
 use std::{
     fs::{self},
+    process,
     sync::mpsc,
     time::Duration,
 };
@@ -112,6 +113,7 @@ fn main() -> color_eyre::Result<()> {
             let action = match app_state.input_state.mode {
                 InputMode::Normal => app_state.handle_normal_mode(key.code, &config_contents),
                 InputMode::Search => app_state.handle_search_mode(key.code),
+                InputMode::CreatePlaylist => app_state.handle_create_playlist(key.code),
             };
 
             if matches!(action, Action::Quit) {

@@ -1,11 +1,16 @@
-use std::{sync::mpsc, time::Duration};
+use std::{
+    fs::{self, File},
+    io::Write,
+    sync::mpsc,
+    time::Duration,
+};
 
-use rodio::Player;
+use rodio::{Player, play};
 use souvlaki::{MediaControls, MediaMetadata};
 
 use crate::{
     lyrics,
-    state::{Action, App, SortOrder},
+    state::{Action, App, Playlist, PlaylistManager, SortOrder},
     utils::get_track_source,
 };
 
@@ -159,6 +164,30 @@ pub fn execute(
         }
         Action::AddToQueue(idx) => {
             app.playback.queue.push(idx);
+            false
+        }
+        Action::CreatePlaylist(name) => {
+            if let Ok(r) = fs::exists(&app.playlist_manager.path)
+                && !r
+                && let Err(_) = File::create(&app.playlist_manager.path)
+            {
+                return false;
+            }
+
+            let _ = fs::read_to_string(&app.playlist_manager.path)
+                .map(|s| app.playlist_manager.playlists = toml::from_str(&s).unwrap_or_default())
+                .and_then(|_| {
+                    app.playlist_manager
+                        .playlists
+                        .insert(name, Playlist { tracks: vec![] });
+                    fs::write(
+                        &app.playlist_manager.path,
+                        toml::to_string(&app.playlist_manager.playlists)
+                            .unwrap_or_default()
+                            .as_bytes(),
+                    )
+                });
+
             false
         }
         Action::None => false,

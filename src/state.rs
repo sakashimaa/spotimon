@@ -1,8 +1,14 @@
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 use rand::RngExt;
 use ratatui::{crossterm::event::KeyCode, widgets::TableState};
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol};
+use serde::{Deserialize, Serialize};
 
 use crate::{config::AppConfig, track_library::TrackLibrary};
 
@@ -15,6 +21,17 @@ pub struct App {
     pub cover_protocol: Option<StatefulProtocol>,
     pub picker: Picker,
     pub sort_state: SortState,
+    pub playlist_manager: PlaylistManager,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Playlist {
+    pub tracks: Vec<PathBuf>,
+}
+
+pub struct PlaylistManager {
+    pub playlists: HashMap<String, Playlist>,
+    pub path: PathBuf,
 }
 
 #[allow(unused)]
@@ -40,17 +57,26 @@ pub struct InputState {
 }
 
 #[allow(unused)]
+pub struct SortState {
+    pub field: SortField,
+    pub order: SortOrder,
+}
+
+#[allow(unused)]
 pub enum ViewMode {
     Library,
     Lyrics,
     Cheatsheet,
     Queue,
+    Playlists,
+    PlaylistView(String),
 }
 
 #[derive(PartialEq)]
 pub enum InputMode {
     Normal,
     Search,
+    CreatePlaylist,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -67,12 +93,6 @@ pub enum SortField {
 pub enum SortOrder {
     Asc,
     Desc,
-}
-
-#[allow(unused)]
-pub struct SortState {
-    pub field: SortField,
-    pub order: SortOrder,
 }
 
 #[allow(unused)]
@@ -98,6 +118,23 @@ pub enum Action {
     ToggleMute,
     ToggleRepeat,
     AddToQueue(usize),
+    CreatePlaylist(String),
+}
+
+impl PlaylistManager {
+    fn new() -> Self {
+        let path = dirs::config_dir()
+            .unwrap()
+            .join("spotimon")
+            .join("playlists.toml");
+
+        Self {
+            playlists: fs::read_to_string(&path)
+                .map(|s| toml::from_str::<HashMap<String, Playlist>>(&s).unwrap_or_default())
+                .unwrap_or_default(),
+            path,
+        }
+    }
 }
 
 impl App {
@@ -123,6 +160,7 @@ impl App {
                 field: SortField::Title,
                 order: SortOrder::Asc,
             },
+            playlist_manager: PlaylistManager::new(),
         }
     }
 
@@ -291,6 +329,9 @@ impl App {
                 }
             }
             KeyCode::Char('z') | KeyCode::Char('Z') => Action::ToggleViewMode(ViewMode::Queue),
+            KeyCode::Char('c') | KeyCode::Char('C') => {
+                Action::ToggleInputMode(InputMode::CreatePlaylist)
+            }
             _ => Action::None,
         }
     }
@@ -313,6 +354,31 @@ impl App {
                 cmp
             }
         })
+    }
+
+    pub fn handle_create_playlist(&mut self, key_code: KeyCode) -> Action {
+        match key_code {
+            KeyCode::Esc => {
+                self.input_state.mode = InputMode::Normal;
+                self.input_state.search_query.clear();
+                Action::None
+            }
+            KeyCode::Char(c) => {
+                self.input_state.search_query.push(c);
+                Action::None
+            }
+            KeyCode::Backspace => {
+                self.input_state.search_query.pop();
+                Action::None
+            }
+            KeyCode::Enter => {
+                let name = self.input_state.search_query.clone();
+                self.input_state.search_query.clear();
+                self.input_state.mode = InputMode::Normal;
+                Action::CreatePlaylist(name)
+            }
+            _ => Action::None,
+        }
     }
 }
 

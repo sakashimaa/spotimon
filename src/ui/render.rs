@@ -1,11 +1,9 @@
-use std::io::empty;
-
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Gauge, Paragraph, Row, Table},
+    widgets::{Block, Clear, Gauge, Paragraph, Row, Table},
 };
 use ratatui_image::StatefulImage;
 
@@ -263,7 +261,19 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
     };
     frame.render_widget(centered_label.centered(), top);
 
-    match app_state.view_mode {
+    if app_state.input_state.mode == InputMode::CreatePlaylist {
+        let popup = Paragraph::new(format!("Name: {}", app_state.input_state.search_query)).block(
+            Block::bordered()
+                .title(" New playlist ")
+                .border_style(Style::new().cyan()),
+        );
+        let area = centered_rect(80, 40, frame.area());
+        frame.render_widget(popup, area);
+
+        return;
+    }
+
+    match &app_state.view_mode {
         ViewMode::Library => {
             render_track_table(frame, main, app_state);
         }
@@ -276,6 +286,8 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         ViewMode::Queue => {
             render_queue(frame, main, app_state);
         }
+        ViewMode::Playlists => {}
+        ViewMode::PlaylistView(name) => {}
     }
 
     render_cover(frame, cover_area, app_state);
