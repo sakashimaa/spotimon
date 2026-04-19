@@ -56,24 +56,15 @@ pub fn execute(
         Action::NextTrack => {
             let next_idx = app.next_track_idx();
 
-            if let Some(source) = get_track_source(next_idx, app) {
-                player.stop();
-                player.append(source);
-                app.play_track(next_idx);
+            if !app.playback.queue.is_empty() {
+                app.playback.queue.remove(0);
             }
 
-            false
+            execute(Action::Play(next_idx), player, app, lyrics_tx, controls)
         }
         Action::PrevTrack => {
             let prev_idx = app.prev_track_idx();
-
-            if let Some(source) = get_track_source(prev_idx, app) {
-                player.stop();
-                player.append(source);
-                app.play_track(prev_idx);
-            }
-
-            false
+            execute(Action::Play(prev_idx), player, app, lyrics_tx, controls)
         }
         Action::Pause => {
             if player.is_paused() {
@@ -164,6 +155,10 @@ pub fn execute(
         }
         Action::ToggleRepeat => {
             app.playback.repeat = !app.playback.repeat;
+            false
+        }
+        Action::AddToQueue(idx) => {
+            app.playback.queue.push(idx);
             false
         }
         Action::None => false,

@@ -1,3 +1,5 @@
+use std::io::empty;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -153,6 +155,8 @@ fn render_cheatsheet(frame: &mut Frame) {
             Span::from("r/R").bold(),
             Span::from("  toggle repeat"),
         ]),
+        Line::from(vec![Span::from("a/A").bold(), Span::from("  add to queue")]),
+        Line::from(vec![Span::from("z/Z").bold(), Span::from("  view queue")]),
     ];
 
     let paragraph = Paragraph::new(lines).block(
@@ -163,6 +167,56 @@ fn render_cheatsheet(frame: &mut Frame) {
 
     let area = centered_rect(40, 50, frame.area());
     frame.render_widget(paragraph, area);
+}
+
+fn render_queue(frame: &mut Frame, area: Rect, app_state: &App) {
+    if app_state.playback.queue.is_empty() {
+        let empty = Paragraph::new("Queue is empty. Press 'a' to add tracks")
+            .style(Style::new().dark_gray());
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let rows: Vec<Row> = app_state
+        .playback
+        .queue
+        .iter()
+        .enumerate()
+        .filter_map(|(pos, &idx)| {
+            app_state.library.tracks.get(idx).map(|t| {
+                let mins = t.duration.as_secs() / 60;
+                let secs = t.duration.as_secs() % 60;
+                Row::new([
+                    format!("{}", pos + 1),
+                    t.title.clone(),
+                    t.artist.clone(),
+                    format!("{}:{:02}", mins, secs),
+                ])
+            })
+        })
+        .collect();
+
+    let widths = [
+        Constraint::Length(3),
+        Constraint::Percentage(40),
+        Constraint::Percentage(40),
+        Constraint::Length(6),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(
+            Row::new(["#", "Title", "Artist", "Duration"])
+                .style(Style::new().bold())
+                .bottom_margin(1),
+        )
+        .block(
+            Block::bordered()
+                .title(" Queue ")
+                .border_style(Style::new().cyan()),
+        )
+        .style(Color::Blue);
+
+    frame.render_widget(table, area);
 }
 
 pub fn render(frame: &mut Frame, app_state: &mut App) {
@@ -218,6 +272,9 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         }
         ViewMode::Cheatsheet => {
             render_cheatsheet(frame);
+        }
+        ViewMode::Queue => {
+            render_queue(frame, main, app_state);
         }
     }
 

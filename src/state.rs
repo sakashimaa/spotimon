@@ -29,6 +29,7 @@ pub struct PlaybackState {
     pub prev_volume: f32,
     pub paused: bool,
     pub repeat: bool,
+    pub queue: Vec<usize>,
 }
 
 #[allow(unused)]
@@ -43,6 +44,7 @@ pub enum ViewMode {
     Library,
     Lyrics,
     Cheatsheet,
+    Queue,
 }
 
 #[derive(PartialEq)]
@@ -95,6 +97,7 @@ pub enum Action {
     Sort(SortField),
     ToggleMute,
     ToggleRepeat,
+    AddToQueue(usize),
 }
 
 impl App {
@@ -128,6 +131,10 @@ impl App {
     }
 
     pub fn next_track_idx(&self) -> usize {
+        if let Some(&idx) = self.playback.queue.first() {
+            return idx;
+        }
+
         if self.playback.repeat
             && let Some(idx) = self.playback.current_track
         {
@@ -256,6 +263,7 @@ impl App {
                         .map(|indices| indices[selected])
                         .unwrap_or(selected);
 
+                    self.playback.queue.clear();
                     Action::Play(real_idx)
                 } else {
                     Action::None
@@ -269,6 +277,20 @@ impl App {
             KeyCode::Char('4') => Action::Sort(SortField::Duration),
             KeyCode::Char('m') | KeyCode::Char('M') => Action::ToggleMute,
             KeyCode::Char('r') | KeyCode::Char('R') => Action::ToggleRepeat,
+            KeyCode::Char('a') | KeyCode::Char('A') => {
+                if let Some(selected) = self.table_state.selected() {
+                    let real_idx = self
+                        .input_state
+                        .filtered_indices
+                        .as_ref()
+                        .map(|indices| indices[selected])
+                        .unwrap_or(selected);
+                    Action::AddToQueue(real_idx)
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Char('z') | KeyCode::Char('Z') => Action::ToggleViewMode(ViewMode::Queue),
             _ => Action::None,
         }
     }
@@ -309,6 +331,7 @@ impl PlaybackState {
             lyrics_scroll: 0,
             prev_volume: config_vol,
             repeat: false,
+            queue: Vec::new(),
         }
     }
 }
