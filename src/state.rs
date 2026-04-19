@@ -21,13 +21,14 @@ pub struct App {
 pub struct PlaybackState {
     pub current_track: Option<usize>,
     pub started_at: Option<Instant>,
-    pub paused: bool,
     pub position: Duration,
     pub volume_level: f32,
     pub is_random_shuffle: bool,
     pub lyrics: Option<String>,
     pub lyrics_scroll: u16,
     pub prev_volume: f32,
+    pub paused: bool,
+    pub repeat: bool,
 }
 
 #[allow(unused)]
@@ -93,6 +94,7 @@ pub enum Action {
     ToggleViewMode(ViewMode),
     Sort(SortField),
     ToggleMute,
+    ToggleRepeat,
 }
 
 impl App {
@@ -126,6 +128,12 @@ impl App {
     }
 
     pub fn next_track_idx(&self) -> usize {
+        if self.playback.repeat
+            && let Some(idx) = self.playback.current_track
+        {
+            return idx;
+        }
+
         if self.playback.is_random_shuffle {
             let mut rng = rand::rng();
             let mut next = rng.random_range(0..self.library.tracks.len());
@@ -260,6 +268,7 @@ impl App {
             KeyCode::Char('3') => Action::Sort(SortField::Album),
             KeyCode::Char('4') => Action::Sort(SortField::Duration),
             KeyCode::Char('m') | KeyCode::Char('M') => Action::ToggleMute,
+            KeyCode::Char('r') | KeyCode::Char('R') => Action::ToggleRepeat,
             _ => Action::None,
         }
     }
@@ -299,6 +308,7 @@ impl PlaybackState {
             lyrics: None,
             lyrics_scroll: 0,
             prev_volume: config_vol,
+            repeat: false,
         }
     }
 }

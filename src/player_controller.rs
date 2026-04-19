@@ -162,6 +162,10 @@ pub fn execute(
             player.set_volume(app.playback.volume_level);
             false
         }
+        Action::ToggleRepeat => {
+            app.playback.repeat = !app.playback.repeat;
+            false
+        }
         Action::None => false,
         _ => false,
     }
