@@ -203,6 +203,20 @@ pub fn execute(
             app.input_state.pending_track = None;
             false
         }
+        Action::DeletePlaylist(name) => {
+            if app
+                .playlist_manager
+                .playlists
+                .iter()
+                .find(|p| *p.0 == name)
+                .is_some()
+            {
+                app.playlist_manager.playlists.remove(&name);
+                app.playlist_manager.save();
+            }
+
+            false
+        }
         Action::None => false,
         _ => false,
     }

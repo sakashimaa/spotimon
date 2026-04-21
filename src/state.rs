@@ -126,6 +126,7 @@ pub enum Action {
     CreatePlaylist(String),
     AddToPlaylist(String),
     DeleteFromPlaylist(String),
+    DeletePlaylist(String),
 }
 
 impl PlaylistManager {
@@ -418,6 +419,15 @@ impl App {
                         self.input_state.pending_track = Some(track_idx);
                         return Action::DeleteFromPlaylist(name.clone());
                     }
+                    Action::None
+                }
+                ViewMode::Playlists => {
+                    if let Some(idx) = self.playlist_table_state.selected()
+                        && let Some(playlist) = self.playlist_manager.playlists.iter().nth(idx)
+                    {
+                        return Action::DeletePlaylist(playlist.0.to_string());
+                    }
+
                     Action::None
                 }
                 _ => Action::None,
