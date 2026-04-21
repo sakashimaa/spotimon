@@ -4,3 +4,4 @@
 volume = 90
 
 skip_interval_secs=5
+notify_message_live_seconds=3

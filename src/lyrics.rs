@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
-use crate::track_library::Track;
-
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct LrcLibResponse {
     #[serde(rename = "plainLyrics")]

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs,
     path::PathBuf,
     time::{Duration, Instant},
@@ -15,6 +15,7 @@ use crate::{config::AppConfig, track_library::TrackLibrary};
 pub struct App {
     pub library: TrackLibrary,
     pub table_state: TableState,
+    pub playlist_table_state: TableState,
     pub playback: PlaybackState,
     pub input_state: InputState,
     pub view_mode: ViewMode,
@@ -22,6 +23,7 @@ pub struct App {
     pub picker: Picker,
     pub sort_state: SortState,
     pub playlist_manager: PlaylistManager,
+    pub status_message: Option<(String, Instant)>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -30,7 +32,7 @@ pub struct Playlist {
 }
 
 pub struct PlaylistManager {
-    pub playlists: HashMap<String, Playlist>,
+    pub playlists: BTreeMap<String, Playlist>,
     pub path: PathBuf,
 }
 
@@ -54,6 +56,7 @@ pub struct InputState {
     pub mode: InputMode,
     pub search_query: String,
     pub filtered_indices: Option<Vec<usize>>,
+    pub pending_track: Option<usize>,
 }
 
 #[allow(unused)]
@@ -63,6 +66,7 @@ pub struct SortState {
 }
 
 #[allow(unused)]
+#[derive(PartialEq)]
 pub enum ViewMode {
     Library,
     Lyrics,
@@ -77,6 +81,7 @@ pub enum InputMode {
     Normal,
     Search,
     CreatePlaylist,
+    AddToPlaylist,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -119,10 +124,12 @@ pub enum Action {
     ToggleRepeat,
     AddToQueue(usize),
     CreatePlaylist(String),
+    AddToPlaylist(String),
+    DeleteFromPlaylist(String),
 }
 
 impl PlaylistManager {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let path = dirs::config_dir()
             .unwrap()
             .join("spotimon")
@@ -130,10 +137,19 @@ impl PlaylistManager {
 
         Self {
             playlists: fs::read_to_string(&path)
-                .map(|s| toml::from_str::<HashMap<String, Playlist>>(&s).unwrap_or_default())
+                .map(|s| toml::from_str::<BTreeMap<String, Playlist>>(&s).unwrap_or_default())
                 .unwrap_or_default(),
             path,
         }
+    }
+
+    pub fn save(&self) {
+        let _ = fs::write(
+            &self.path,
+            toml::to_string(&self.playlists)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
     }
 }
 
@@ -141,17 +157,20 @@ impl App {
     pub fn new(
         library: TrackLibrary,
         table_state: TableState,
+        playlist_table_state: TableState,
         playback: PlaybackState,
         picker: Picker,
     ) -> Self {
         Self {
             library,
             table_state,
+            playlist_table_state,
             playback,
             input_state: InputState {
                 mode: InputMode::Normal,
                 search_query: String::new(),
                 filtered_indices: None,
+                pending_track: None,
             },
             view_mode: ViewMode::Library,
             cover_protocol: None,
@@ -161,6 +180,7 @@ impl App {
                 order: SortOrder::Asc,
             },
             playlist_manager: PlaylistManager::new(),
+            status_message: None,
         }
     }
 
@@ -254,6 +274,20 @@ impl App {
         }
     }
 
+    pub fn selected_library_idx(&self) -> Option<usize> {
+        if let Some(selected) = self.table_state.selected() {
+            return Some(
+                self.input_state
+                    .filtered_indices
+                    .as_ref()
+                    .map(|indices| indices[selected])
+                    .unwrap_or(selected),
+            );
+        }
+
+        None
+    }
+
     pub fn handle_normal_mode(&mut self, key_code: KeyCode, config: &AppConfig) -> Action {
         match key_code {
             KeyCode::Esc | KeyCode::Char('q') => Action::Quit,
@@ -268,6 +302,11 @@ impl App {
                     self.playback.lyrics_scroll += 1;
                     Action::None
                 }
+                ViewMode::Playlists | ViewMode::PlaylistView(_) => {
+                    self.playlist_table_state.select_next();
+                    Action::None
+                }
+
                 _ => Action::NavigateDown,
             },
             KeyCode::Char('k') | KeyCode::Up => match self.view_mode {
@@ -275,6 +314,11 @@ impl App {
                     self.playback.lyrics_scroll = self.playback.lyrics_scroll.saturating_sub(1);
                     Action::None
                 }
+                ViewMode::Playlists | ViewMode::PlaylistView(_) => {
+                    self.playlist_table_state.select_previous();
+                    Action::None
+                }
+
                 _ => Action::NavigateUp,
             },
             KeyCode::Char('+') | KeyCode::Char('=') => {
@@ -291,22 +335,55 @@ impl App {
             KeyCode::Char('s') => Action::ToggleShuffle,
             KeyCode::Char('L') => Action::ToggleViewMode(ViewMode::Lyrics),
             KeyCode::Backspace => Action::ToggleViewMode(ViewMode::Library),
-            KeyCode::Enter => {
-                self.playback.lyrics_scroll = 0;
-                if let Some(selected) = self.table_state.selected() {
-                    let real_idx = self
-                        .input_state
-                        .filtered_indices
-                        .as_ref()
-                        .map(|indices| indices[selected])
-                        .unwrap_or(selected);
+            KeyCode::Enter => match &self.view_mode {
+                ViewMode::Playlists => {
+                    if let Some(selected) = self.playlist_table_state.selected()
+                        && let Some(playlist_name) =
+                            self.playlist_manager.playlists.keys().nth(selected)
+                    {
+                        return Action::ToggleViewMode(ViewMode::PlaylistView(
+                            playlist_name.clone(),
+                        ));
+                    }
 
-                    self.playback.queue.clear();
-                    Action::Play(real_idx)
-                } else {
                     Action::None
                 }
-            }
+                ViewMode::PlaylistView(name) => {
+                    let name = name.clone();
+                    if let Some(selected) = self.playlist_table_state.selected()
+                        && let Some(playlist) = self.playlist_manager.playlists.get(&name)
+                        && let Some(track_path) = playlist.tracks.get(selected)
+                        && let Some(track_idx) = self
+                            .library
+                            .tracks
+                            .iter()
+                            .position(|t| t.path == *track_path)
+                    {
+                        let remaining: Vec<usize> = playlist
+                            .tracks
+                            .iter()
+                            .skip(selected + 1)
+                            .filter_map(|p| self.library.tracks.iter().position(|t| t.path == *p))
+                            .collect();
+
+                        self.playback.queue.clear();
+                        self.playback.queue.extend(remaining);
+
+                        return Action::Play(track_idx);
+                    }
+
+                    Action::None
+                }
+                _ => {
+                    self.playback.lyrics_scroll = 0;
+                    if let Some(real_idx) = self.selected_library_idx() {
+                        self.playback.queue.clear();
+                        Action::Play(real_idx)
+                    } else {
+                        Action::None
+                    }
+                }
+            },
             KeyCode::Char('/') => Action::ToggleInputMode(InputMode::Search),
             KeyCode::Char('?') => Action::ToggleViewMode(ViewMode::Cheatsheet),
             KeyCode::Char('1') => Action::Sort(SortField::Title),
@@ -316,13 +393,7 @@ impl App {
             KeyCode::Char('m') | KeyCode::Char('M') => Action::ToggleMute,
             KeyCode::Char('r') | KeyCode::Char('R') => Action::ToggleRepeat,
             KeyCode::Char('a') | KeyCode::Char('A') => {
-                if let Some(selected) = self.table_state.selected() {
-                    let real_idx = self
-                        .input_state
-                        .filtered_indices
-                        .as_ref()
-                        .map(|indices| indices[selected])
-                        .unwrap_or(selected);
+                if let Some(real_idx) = self.selected_library_idx() {
                     Action::AddToQueue(real_idx)
                 } else {
                     Action::None
@@ -332,6 +403,25 @@ impl App {
             KeyCode::Char('c') | KeyCode::Char('C') => {
                 Action::ToggleInputMode(InputMode::CreatePlaylist)
             }
+            KeyCode::Char('t') | KeyCode::Char('T') => Action::ToggleViewMode(ViewMode::Playlists),
+            KeyCode::Char(':') => {
+                if let Some(real_idx) = self.selected_library_idx() {
+                    self.input_state.pending_track = Some(real_idx);
+                    Action::ToggleInputMode(InputMode::AddToPlaylist)
+                } else {
+                    Action::None
+                }
+            }
+            KeyCode::Char('d') => match &self.view_mode {
+                ViewMode::PlaylistView(name) => {
+                    if let Some(track_idx) = self.playlist_table_state.selected() {
+                        self.input_state.pending_track = Some(track_idx);
+                        return Action::DeleteFromPlaylist(name.clone());
+                    }
+                    Action::None
+                }
+                _ => Action::None,
+            },
             _ => Action::None,
         }
     }
@@ -376,6 +466,34 @@ impl App {
                 self.input_state.search_query.clear();
                 self.input_state.mode = InputMode::Normal;
                 Action::CreatePlaylist(name)
+            }
+            _ => Action::None,
+        }
+    }
+
+    pub fn handle_add_to_playlist(&mut self, key_code: KeyCode) -> Action {
+        match key_code {
+            KeyCode::Esc => {
+                self.input_state.mode = InputMode::Normal;
+                Action::None
+            }
+            KeyCode::Char('j') => {
+                self.playlist_table_state.select_next();
+                Action::None
+            }
+            KeyCode::Char('k') => {
+                self.playlist_table_state.select_previous();
+                Action::None
+            }
+            KeyCode::Enter => {
+                if let Some(selected) = self.playlist_table_state.selected()
+                    && let Some(playlist_name) =
+                        self.playlist_manager.playlists.iter().nth(selected)
+                {
+                    return Action::AddToPlaylist(playlist_name.0.to_string());
+                }
+
+                Action::None
             }
             _ => Action::None,
         }

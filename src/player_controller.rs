@@ -1,16 +1,14 @@
 use std::{
-    fs::{self, File},
-    io::Write,
     sync::mpsc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use rodio::{Player, play};
+use rodio::Player;
 use souvlaki::{MediaControls, MediaMetadata};
 
 use crate::{
     lyrics,
-    state::{Action, App, Playlist, PlaylistManager, SortOrder},
+    state::{Action, App, InputMode, Playlist, SortOrder},
     utils::get_track_source,
 };
 
@@ -167,27 +165,42 @@ pub fn execute(
             false
         }
         Action::CreatePlaylist(name) => {
-            if let Ok(r) = fs::exists(&app.playlist_manager.path)
-                && !r
-                && let Err(_) = File::create(&app.playlist_manager.path)
+            app.playlist_manager
+                .playlists
+                .insert(name, Playlist { tracks: vec![] });
+            app.playlist_manager.save();
+
+            false
+        }
+        Action::AddToPlaylist(name) => {
+            if let Some(playlist) = app.playlist_manager.playlists.get_mut(&name)
+                && let Some(track_idx) = app.input_state.pending_track
+                && let Some(track) = app.library.tracks.get(track_idx)
+                && !playlist.tracks.contains(&track.path)
             {
-                return false;
+                playlist.tracks.push(track.path.clone());
+                app.playlist_manager.save();
+                app.status_message = Some((format!("Added to {name}!"), Instant::now()))
             }
 
-            let _ = fs::read_to_string(&app.playlist_manager.path)
-                .map(|s| app.playlist_manager.playlists = toml::from_str(&s).unwrap_or_default())
-                .and_then(|_| {
-                    app.playlist_manager
-                        .playlists
-                        .insert(name, Playlist { tracks: vec![] });
-                    fs::write(
-                        &app.playlist_manager.path,
-                        toml::to_string(&app.playlist_manager.playlists)
-                            .unwrap_or_default()
-                            .as_bytes(),
-                    )
-                });
+            app.input_state.mode = InputMode::Normal;
+            app.input_state.pending_track = None;
+            false
+        }
+        Action::DeleteFromPlaylist(name) => {
+            if let Some(playlist) = app.playlist_manager.playlists.get_mut(&name)
+                && let Some(track_idx) = app.input_state.pending_track
+                && let Some(track) = app.library.tracks.get(track_idx)
+            {
+                playlist.tracks.remove(track_idx);
+                app.playlist_manager.save();
+                app.status_message = Some((
+                    format!("Deleted {} from {}", track.title, name),
+                    Instant::now(),
+                ))
+            }
 
+            app.input_state.pending_track = None;
             false
         }
         Action::None => false,

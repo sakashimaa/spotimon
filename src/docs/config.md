@@ -10,6 +10,7 @@ volume = 50
 
 music_folder = "/home/user/Music"
 skip_interval_secs = 5
+notify_message_live_seconds=3
 ```
 
 ## Options
@@ -21,6 +22,22 @@ skip_interval_secs = 5
 | **Type**        | String (path)                                                                                                                                                                                                       |
 | **Default**     | `~/Music`                                                                                                                                                                                                           |
 | **Description** | Path to the directory containing your music files. spotimon recursively scans this directory for supported audio files (`.mp3`, `.flac`, `.ogg`). If the directory doesn't exist, it will be created automatically. |
+
+### `skip_interval_secs`
+
+|                 |                                                 |
+| --------------- | ----------------------------------------------- |
+| **Type**        | Integer                                         |
+| **Default**     | `5`                                             |
+| **Description** | How much volume up / down when you click + / -. |
+
+### `notify_message_live_seconds`
+
+|                 |                                                                       |
+| --------------- | --------------------------------------------------------------------- |
+| **Type**        | Integer                                                               |
+| **Default**     | `3`                                                                   |
+| **Description** | How much toast messages (e.g 'deleted from yokko!') lives in seconds. |
 
 ### `[device]`
 

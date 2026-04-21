@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub device: DeviceConfig,
     pub music_folder: PathBuf,
     pub skip_interval_secs: u64,
+    pub notify_message_live_seconds: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -23,6 +24,7 @@ impl Default for AppConfig {
             skip_interval_secs: 5,
             device: DeviceConfig { volume: 50 },
             music_folder: dirs::home_dir().expect("No home dir").join("Music"),
+            notify_message_live_seconds: 3,
         }
     }
 }

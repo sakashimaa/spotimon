@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -8,7 +10,9 @@ use ratatui::{
 use ratatui_image::StatefulImage;
 
 use crate::{
+    config::AppConfig,
     state::{App, InputMode, SortField, ViewMode},
+    track_library::Track,
     utils::{centered_rect, sort_indicator},
 };
 
@@ -48,6 +52,119 @@ fn render_track_progress(frame: &mut Frame, area: Rect, app_state: &App) {
     }
 }
 
+pub fn render_playlists_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
+    let header = Row::new(["Name"])
+        .style(Style::new().bold())
+        .bottom_margin(1);
+
+    let rows: Vec<Row> = app_state
+        .playlist_manager
+        .playlists
+        .iter()
+        .map(|p| Row::new([p.0.clone()]))
+        .collect();
+
+    let widths = [Constraint::Percentage(100)];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .column_spacing(1)
+        .style(Color::Blue)
+        .row_highlight_style(Style::new().on_black().bold())
+        .column_highlight_style(Color::Gray);
+
+    frame.render_stateful_widget(table, area, &mut app_state.playlist_table_state);
+}
+
+pub fn render_add_to_playlist_popup(frame: &mut Frame, area: Rect, app_state: &mut App) {
+    let block = Block::bordered()
+        .title(" Add to playlist ")
+        .border_style(Style::new().cyan());
+    let inner = block.inner(area);
+
+    frame.render_widget(Clear, area);
+    frame.render_widget(block, area);
+    render_playlists_table(frame, inner, app_state);
+}
+
+pub fn render_playlist_tracks(
+    frame: &mut Frame,
+    area: Rect,
+    playlist_name: &str,
+    app_state: &mut App,
+) {
+    if let Some(playlist) = app_state.playlist_manager.playlists.get(playlist_name) {
+        let lib_tracks: Vec<Option<(usize, &Track)>> = playlist
+            .tracks
+            .iter()
+            .map(|tr| {
+                app_state
+                    .library
+                    .tracks
+                    .iter()
+                    .enumerate()
+                    .find(|(_, t)| t.path == *tr)
+            })
+            .collect();
+
+        let header = Row::new([
+            sort_indicator("Title", SortField::Title, &app_state.sort_state),
+            sort_indicator("Artist", SortField::Artist, &app_state.sort_state),
+            sort_indicator("Album", SortField::Album, &app_state.sort_state),
+            sort_indicator("Duration", SortField::Duration, &app_state.sort_state),
+        ])
+        .style(Style::new().bold())
+        .bottom_margin(1);
+
+        let current = app_state.playback.current_track;
+        let rows: Vec<Row> = lib_tracks
+            .iter()
+            .filter_map(|o| o.as_ref())
+            .map(|&(i, t)| track_row(t, i, current))
+            .collect();
+
+        let widths = [
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ];
+
+        let table = Table::new(rows, widths)
+            .header(header)
+            .column_spacing(1)
+            .style(Color::Blue)
+            .row_highlight_style(Style::new().on_black().bold())
+            .column_highlight_style(Color::Gray);
+
+        frame.render_stateful_widget(table, area, &mut app_state.playlist_table_state);
+    } else {
+        let not_found_text = Paragraph::new("Not found.");
+        let centered_area = centered_rect(40, 50, frame.area());
+        frame.render_widget(not_found_text, centered_area);
+    }
+}
+
+fn track_row(track: &Track, idx: usize, current: Option<usize>) -> Row<'_> {
+    let mins = track.duration.as_secs() / 60;
+    let secs = track.duration.as_secs() % 60;
+
+    let row = Row::new([
+        track.title.clone(),
+        track.artist.clone(),
+        track.album.clone(),
+        format!("{}:{:02}", mins, secs),
+    ]);
+
+    if let Some(curr) = current
+        && curr == idx
+    {
+        row.style(Style::new().red())
+    } else {
+        row
+    }
+}
+
 fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
     let header = Row::new([
         sort_indicator("Title", SortField::Title, &app_state.sort_state),
@@ -68,22 +185,7 @@ fn render_track_table(frame: &mut Frame, area: Rect, app_state: &mut App) {
     let rows: Vec<Row> = indices
         .iter()
         .filter_map(|&i| app_state.library.tracks.get(i).map(|t| (i, t)))
-        .map(|(i, t)| {
-            let mins = t.duration.as_secs() / 60;
-            let secs = t.duration.as_secs() % 60;
-
-            let row = Row::new([
-                t.title.clone(),
-                t.artist.clone(),
-                t.album.clone(),
-                format!("{}:{:02}", mins, secs),
-            ]);
-            if Some(i) == current {
-                row.style(Style::new().red())
-            } else {
-                row
-            }
-        })
+        .map(|(i, t)| track_row(t, i, current))
         .collect();
     let widths = [
         Constraint::Percentage(25),
@@ -217,7 +319,7 @@ fn render_queue(frame: &mut Frame, area: Rect, app_state: &App) {
     frame.render_widget(table, area);
 }
 
-pub fn render(frame: &mut Frame, app_state: &mut App) {
+pub fn render(frame: &mut Frame, app_state: &mut App, app_config: &AppConfig) {
     let has_cover = app_state.cover_protocol.is_some();
     let cover_height: u16 = if has_cover { 6 } else { 0 };
 
@@ -252,6 +354,10 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
 
     let centered_label = if app_state.input_state.mode == InputMode::Search {
         Line::from(format!("/{}", app_state.input_state.search_query.clone()))
+    } else if let Some(status_message) = &app_state.status_message
+        && status_message.1.elapsed() < Duration::from_secs(app_config.notify_message_live_seconds)
+    {
+        Line::from(status_message.0.clone())
     } else {
         Line::from_iter([
             Span::from("Track library").bold(),
@@ -273,6 +379,13 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         return;
     }
 
+    if app_state.input_state.mode == InputMode::AddToPlaylist {
+        let area = centered_rect(50, 60, frame.area());
+        render_add_to_playlist_popup(frame, area, app_state);
+
+        return;
+    }
+
     match &app_state.view_mode {
         ViewMode::Library => {
             render_track_table(frame, main, app_state);
@@ -286,8 +399,13 @@ pub fn render(frame: &mut Frame, app_state: &mut App) {
         ViewMode::Queue => {
             render_queue(frame, main, app_state);
         }
-        ViewMode::Playlists => {}
-        ViewMode::PlaylistView(name) => {}
+        ViewMode::Playlists => {
+            render_playlists_table(frame, main, app_state);
+        }
+        ViewMode::PlaylistView(name) => {
+            let name = name.clone();
+            render_playlist_tracks(frame, main, &name, app_state);
+        }
     }
 
     render_cover(frame, cover_area, app_state);

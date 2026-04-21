@@ -1,6 +1,5 @@
 use std::{
     fs::{self},
-    process,
     sync::mpsc,
     time::Duration,
 };
@@ -55,6 +54,10 @@ fn main() -> color_eyre::Result<()> {
     track_table_state.select_first();
     track_table_state.select_first_column();
 
+    let mut playlist_table_state = TableState::default();
+    playlist_table_state.select_first();
+    playlist_table_state.select_first_column();
+
     let handle =
         rodio::DeviceSinkBuilder::open_default_sink().expect("Failed to open audio stream");
     let player = rodio::Player::connect_new(handle.mixer());
@@ -65,6 +68,7 @@ fn main() -> color_eyre::Result<()> {
     let mut app_state = App::new(
         library,
         track_table_state,
+        playlist_table_state,
         PlaybackState::new(&config_contents),
         picker,
     );
@@ -103,8 +107,15 @@ fn main() -> color_eyre::Result<()> {
             player_controller::execute(action, &player, &mut app_state, &lyrics_tx, &mut controls);
         }
 
+        if let Some(status_message) = &app_state.status_message
+            && status_message.1.elapsed()
+                > Duration::from_secs(config_contents.notify_message_live_seconds)
+        {
+            app_state.status_message = None
+        }
+
         terminal.draw(|frame| {
-            ui::render::render(frame, &mut app_state);
+            ui::render::render(frame, &mut app_state, &config_contents);
         })?;
 
         if event::poll(Duration::from_millis(16))?
@@ -114,6 +125,7 @@ fn main() -> color_eyre::Result<()> {
                 InputMode::Normal => app_state.handle_normal_mode(key.code, &config_contents),
                 InputMode::Search => app_state.handle_search_mode(key.code),
                 InputMode::CreatePlaylist => app_state.handle_create_playlist(key.code),
+                InputMode::AddToPlaylist => app_state.handle_add_to_playlist(key.code),
             };
 
             if matches!(action, Action::Quit) {
