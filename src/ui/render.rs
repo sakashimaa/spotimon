@@ -257,6 +257,22 @@ fn render_cheatsheet(frame: &mut Frame) {
         ]),
         Line::from(vec![Span::from("a/A").bold(), Span::from("  add to queue")]),
         Line::from(vec![Span::from("z/Z").bold(), Span::from("  view queue")]),
+        Line::from(vec![
+            Span::from("t/T").bold(),
+            Span::from("  view playlists"),
+        ]),
+        Line::from(vec![
+            Span::from("c/C").bold(),
+            Span::from("  create playlist"),
+        ]),
+        Line::from(vec![
+            Span::from(":").bold(),
+            Span::from("  add to playlist"),
+        ]),
+        Line::from(vec![
+            Span::from("d").bold(),
+            Span::from("  delete from playlist"),
+        ]),
     ];
 
     let paragraph = Paragraph::new(lines).block(
@@ -359,8 +375,27 @@ pub fn render(frame: &mut Frame, app_state: &mut App, app_config: &AppConfig) {
     {
         Line::from(status_message.0.clone())
     } else {
+        let context_aware_title = match &app_state.view_mode {
+            ViewMode::Queue => "Queue".to_string(),
+            ViewMode::Lyrics => "Lyrics".to_string(),
+            ViewMode::Playlists => "Playlists".to_string(),
+            ViewMode::Library => "Track library".to_string(),
+            ViewMode::Cheatsheet => "Cheatsheet".to_string(),
+            ViewMode::PlaylistView(name) => {
+                let tracks_quantity = app_state
+                    .playlist_manager
+                    .playlists
+                    .iter()
+                    .find(|p| p.0 == name)
+                    .map(|p| p.1.tracks.len())
+                    .unwrap_or_default();
+
+                format!("{} ({} tracks)", name, tracks_quantity)
+            }
+        };
+
         Line::from_iter([
-            Span::from("Track library").bold(),
+            Span::from(context_aware_title),
             shuffle_indicator,
             Span::from(" (q: quit, j/k: nav, s: shuffle, ?: cheatsheet)"),
         ])
