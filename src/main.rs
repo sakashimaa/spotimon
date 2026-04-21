@@ -126,6 +126,7 @@ fn main() -> color_eyre::Result<()> {
                 InputMode::Search => app_state.handle_search_mode(key.code),
                 InputMode::CreatePlaylist => app_state.handle_create_playlist(key.code),
                 InputMode::AddToPlaylist => app_state.handle_add_to_playlist(key.code),
+                InputMode::RenamePlaylist => app_state.handle_rename_playlist(key.code),
             };
 
             if matches!(action, Action::Quit) {

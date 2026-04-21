@@ -402,23 +402,37 @@ pub fn render(frame: &mut Frame, app_state: &mut App, app_config: &AppConfig) {
     };
     frame.render_widget(centered_label.centered(), top);
 
-    if app_state.input_state.mode == InputMode::CreatePlaylist {
-        let popup = Paragraph::new(format!("Name: {}", app_state.input_state.search_query)).block(
-            Block::bordered()
-                .title(" New playlist ")
-                .border_style(Style::new().cyan()),
-        );
-        let area = centered_rect(80, 40, frame.area());
-        frame.render_widget(popup, area);
+    match app_state.input_state.mode {
+        InputMode::CreatePlaylist => {
+            let popup = Paragraph::new(format!("Name: {}", app_state.input_state.search_query))
+                .block(
+                    Block::bordered()
+                        .title(" New playlist ")
+                        .border_style(Style::new().cyan()),
+                );
+            let area = centered_rect(80, 40, frame.area());
+            frame.render_widget(popup, area);
 
-        return;
-    }
+            return;
+        }
+        InputMode::AddToPlaylist => {
+            let area = centered_rect(50, 60, frame.area());
+            render_add_to_playlist_popup(frame, area, app_state);
 
-    if app_state.input_state.mode == InputMode::AddToPlaylist {
-        let area = centered_rect(50, 60, frame.area());
-        render_add_to_playlist_popup(frame, area, app_state);
+            return;
+        }
+        InputMode::RenamePlaylist => {
+            let popup = Paragraph::new(app_state.input_state.search_query.to_string()).block(
+                Block::bordered()
+                    .title(" Rename Playlist ")
+                    .border_style(Style::new().cyan()),
+            );
+            let area = centered_rect(80, 40, frame.area());
+            frame.render_widget(popup, area);
 
-        return;
+            return;
+        }
+        _ => {}
     }
 
     match &app_state.view_mode {

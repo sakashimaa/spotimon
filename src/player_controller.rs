@@ -217,6 +217,27 @@ pub fn execute(
 
             false
         }
+        Action::RenamePlaylist(name) => {
+            if let Some(playlist) = app.playlist_manager.playlists.iter().find(|p| *p.0 == name)
+                && !app
+                    .playlist_manager
+                    .playlists
+                    .contains_key(&app.input_state.search_query)
+            {
+                let tracks = playlist.1.tracks.clone();
+                app.playlist_manager.playlists.remove(&name);
+
+                app.playlist_manager
+                    .playlists
+                    .insert(app.input_state.search_query.clone(), Playlist { tracks });
+            }
+
+            app.input_state.mode = InputMode::Normal;
+            app.input_state.search_query = String::new();
+            app.input_state.pending_playlist = None;
+            app.playlist_manager.save();
+            false
+        }
         Action::None => false,
         _ => false,
     }

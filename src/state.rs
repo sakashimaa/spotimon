@@ -57,6 +57,7 @@ pub struct InputState {
     pub search_query: String,
     pub filtered_indices: Option<Vec<usize>>,
     pub pending_track: Option<usize>,
+    pub pending_playlist: Option<String>,
 }
 
 #[allow(unused)]
@@ -82,6 +83,7 @@ pub enum InputMode {
     Search,
     CreatePlaylist,
     AddToPlaylist,
+    RenamePlaylist,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -127,6 +129,7 @@ pub enum Action {
     AddToPlaylist(String),
     DeleteFromPlaylist(String),
     DeletePlaylist(String),
+    RenamePlaylist(String),
 }
 
 impl PlaylistManager {
@@ -172,6 +175,7 @@ impl App {
                 search_query: String::new(),
                 filtered_indices: None,
                 pending_track: None,
+                pending_playlist: None,
             },
             view_mode: ViewMode::Library,
             cover_protocol: None,
@@ -392,7 +396,20 @@ impl App {
             KeyCode::Char('3') => Action::Sort(SortField::Album),
             KeyCode::Char('4') => Action::Sort(SortField::Duration),
             KeyCode::Char('m') | KeyCode::Char('M') => Action::ToggleMute,
-            KeyCode::Char('r') | KeyCode::Char('R') => Action::ToggleRepeat,
+            KeyCode::Char('r') | KeyCode::Char('R') => match self.view_mode {
+                ViewMode::Playlists => {
+                    if let Some(idx) = self.playlist_table_state.selected()
+                        && let Some(playlist) = self.playlist_manager.playlists.iter().nth(idx)
+                    {
+                        self.input_state.pending_playlist = Some(playlist.0.clone());
+                        self.input_state.search_query = playlist.0.clone();
+                        return Action::ToggleInputMode(InputMode::RenamePlaylist);
+                    }
+
+                    Action::None
+                }
+                _ => Action::ToggleRepeat,
+            },
             KeyCode::Char('a') | KeyCode::Char('A') => {
                 if let Some(real_idx) = self.selected_library_idx() {
                     Action::AddToQueue(real_idx)
@@ -501,6 +518,34 @@ impl App {
                         self.playlist_manager.playlists.iter().nth(selected)
                 {
                     return Action::AddToPlaylist(playlist_name.0.to_string());
+                }
+
+                Action::None
+            }
+            _ => Action::None,
+        }
+    }
+
+    pub fn handle_rename_playlist(&mut self, key_code: KeyCode) -> Action {
+        match key_code {
+            KeyCode::Esc => {
+                self.input_state.mode = InputMode::Normal;
+                self.input_state.search_query = String::new();
+                self.input_state.pending_playlist = None;
+
+                Action::None
+            }
+            KeyCode::Backspace => {
+                self.input_state.search_query.pop();
+                Action::None
+            }
+            KeyCode::Char(c) => {
+                self.input_state.search_query.push(c);
+                Action::None
+            }
+            KeyCode::Enter => {
+                if let Some(name) = &self.input_state.pending_playlist {
+                    return Action::RenamePlaylist(name.clone());
                 }
 
                 Action::None
